@@ -117,7 +117,7 @@ function thyroid
     figure(1)
     set(gca, 'fontsize', 14)
     plot(sol.x, sol.y, 'LineWidth', 1.5)
-    axis([0 200 0 8])
+    axis([0 20 0 1])
     %legend('mRNA (M)', 'total PER (P_T)', 'nuclear PER (P_N)')
     xlabel('Time (h)')
     ylabel('Concentration (\muM)')
@@ -190,7 +190,8 @@ function dS = thyroidddt(t, S, Z)
 
     TSH_T0T = Z(4, 1);
 
-    FT4_T03Z = Z(8, 2);
+    T4_T03Z = Z(1, 2);
+    FT4_T03Z = T4_T03Z / (1 + K41 * TBG + K42 * TBPA);
 
     TRH_T0S = TRH;
     TSHz_T0S = Z(5, 3);
@@ -223,6 +224,6 @@ function dS = thyroidddt(t, S, Z)
     dTSHz = (aS2 * GH * TRH_T0S2) / ((TRH_T0S2 + DH) * (1 + (SS * TSHz_T0S2) / (TSHz_T0S2 + DS)) * (1 + LS * T3R_T0S2)) - BS2 * TSHz;
 
 
-    dS = [dT4, dT3P, dT3c, dTSH, dTSHz];
+    dS = [dT4; dT3P; dT3c; dTSH; dTSHz];
 
 end
