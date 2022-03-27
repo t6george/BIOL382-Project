@@ -46,48 +46,56 @@ function thyroid
     global IBS;
     
     
-    aT = 1.0;
-    aS = 1.0;
-    aS2 = 1.0;
-    a31 = 1.0;
-    a32 = 1.0;
+    aT = 0.1;
+    aS = 0.4;
+    aS2 = 2.6 * 10^(-5);
+    a31 = 2.6 * 10^(-2);
+    a32 = 1.3 * 10^(-5);
     
-    BT = 1.0;
-    BS = 1.0;
-    BS2 = 1.0;
-    B31 = 1.0;
-    B32 = 1.0;
+    BT = 1.1 * 10^(-6);
+    BS = 2.3 * 10^(-4);
+    BS2 = 140.0;
+    B31 = 8.0 * 10^(-6);
+    B32 = 8.3 * 10^(-4);
     
-    GT = 1.0;
-    GH = 1.0;
-    GD1 = 1.0;
-    GD2 = 1.0;
-    GT3 = 1.0;
+    GT = 3.4;
+    GH = 817.0;
+    GD1 = 22.0;
+    GD2 = 4.3;
+    GT3 = 394.0;
+
+    % correct value
     GR = 1.0;
     
-    KM1 = 1.0;
+    KM1 = 500.0;
+
+    % correct value
     KM2 = 1.0;
-    K30 = 1.0;
-    K41 = 1.0;
-    K42 = 1.0;
-    K31 = 1.0;
     
+    K30 = 2 * 10^(9);
+    K41 = 2 * 10^(10);
+    K42 = 2 * 10^(8);
+    K31 = 2 * 10^(9);
+    
+    % correct value
     k = 1.0;
+
+    % what are these??
     l = 1.0;
     s = 1.0;
     
-    DH = 1.0;
-    DS = 1.0;
-    DT = 1.0;
-    DR = 1.0;
+    DH = 47.0;
+    DS = 50.0;
+    DT = 2.75;
+    DR = 100.0;
     
-    SS = 1.0;
-    LS = 1.0;
+    SS = 100.0;
+    LS = 1.68;
     
-    TRH = 1.0;
-    TBG = 1.0;
-    TBPA = 1.0;
-    IBS = 1.0;
+    TRH = 6.9;
+    TBG = 300.0;
+    TBPA = 4.5;
+    IBS = 8.0;
     
     
     % set simulation parameters
@@ -104,10 +112,10 @@ function thyroid
 
 
     % set delays
-    T0T = 1.0;
-    T03Z = 1.0;
-    T0S = 1.0;
-    T0S2 = 1.0;
+    T0T = 300.0;
+    T03Z = 3600.0;
+    T0S = 120.0;
+    T0S2 = 3240.0;
     
     % simulate system
     sol=dde23(ODEFUN, [T0T, T03Z, T0S, T0S2], S0, [0, Tend]);
