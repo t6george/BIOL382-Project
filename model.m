@@ -1,50 +1,6 @@
 function thyroid
 
     % define constants
-
-    global aT;
-    global aS;
-    global aS2;
-    global a31;
-    global a32;
-    
-    global BT;
-    global BS;
-    global BS2;
-    global B31;
-    global B32;
-    
-    global GT;
-    global GH;
-    global GD1;
-    global GD2;
-    global GT3;
-    global GR;
-    
-    global KM1;
-    global KM2;
-    global K30;
-    global K41;
-    global K42;
-    global K31;
-    
-    global k;
-    global l;
-    global s;
-    
-    global DH;
-    global DS;
-    global DT;
-    global DR;
-    
-    global SS;
-    global LS;
-    
-    global TRH;
-    global TBG;
-    global TBPA;
-    global IBS;
-    
     
     aT = 0.1;
     aS = 0.4;
@@ -100,7 +56,7 @@ function thyroid
     
     % set simulation parameters
     ODEFUN = @thyroidddt;
-    Tend = 20;
+    Tend = 360;
     
     % set initial condition: state = [T4, T3P, T3c, TSH, TSHz]
     T4_0 = 0.0;
@@ -118,66 +74,27 @@ function thyroid
     T0S2 = 3240.0;
     
     % simulate system
-    sol=dde23(ODEFUN, [T0T, T03Z, T0S, T0S2], S0, [0, Tend]);
+    sol=dde23( ...
+        @(t, S, Z) thyroidddt(t, S, Z, aT, aS, aS2, a31, a32, BT, BS, BS2, B31, B32, GT, GH, GD1, GD2, GT3, GR, KM1, KM2, K30, K41, K42, K31, k, l, s, DH, DS, DT, DR, SS, LS, TRH, TBG, TBPA, IBS), ...
+        [T0T, T03Z, T0S, T0S2], S0, [0, Tend] ...
+    );
 
+    % sol.y(end)
 
     % plot
     figure(1)
     set(gca, 'fontsize', 14)
     plot(sol.x, sol.y, 'LineWidth', 1.5)
-    axis([0 20 0 1])
-    %legend('mRNA (M)', 'total PER (P_T)', 'nuclear PER (P_N)')
-    xlabel('Time (h)')
+    %axis([0 20 0 1])
+    legend('T4', 'T3P', 'T3c', 'TSH', 'TSHz')
+    xlabel('Time (s)')
     ylabel('Concentration (\muM)')
    
 end
 
 
 % model dynamics
-function dS = thyroidddt(t, S, Z)
-
-    global aT;
-    global aS;
-    global aS2;
-    global a31;
-    global a32;
-    
-    global BT;
-    global BS;
-    global BS2;
-    global B31;
-    global B32;
-    
-    global GT;
-    global GH;
-    global GD1;
-    global GD2;
-    global GT3;
-    global GR;
-    
-    global KM1;
-    global KM2;
-    global K30;
-    global K41;
-    global K42;
-    global K31;
-    
-    global k;
-    global l;
-    global s;
-    
-    global DH;
-    global DS;
-    global DT;
-    global DR;
-    
-    global SS;
-    global LS;
-    
-    global TRH;
-    global TBG;
-    global TBPA;
-    global IBS;
+function dS = thyroidddt(t, S, Z, aT, aS, aS2, a31, a32, BT, BS, BS2, B31, B32, GT, GH, GD1, GD2, GT3, GR, KM1, KM2, K30, K41, K42, K31, k, l, s, DH, DS, DT, DR, SS, LS, TRH, TBG, TBPA, IBS)
 
     % Current State Variables
     T4 = S(1);
