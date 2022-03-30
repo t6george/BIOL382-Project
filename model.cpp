@@ -1,9 +1,13 @@
 #include "ascent/Ascent.h"
 
+
 using namespace asc;
 
 static constexpr size_t c_NumStateVariables = 10;
+static constexpr size_t c_NumDifferentialStateVariables = 5;
+
 using FullState = std::array<double, c_NumStateVariables>;
+
 
 struct Constants
 {
@@ -87,14 +91,6 @@ int main()
     auto lorenz = [&cs = std::as_const(constants), &delay = std::as_const(delay), &history]
         (const state_t& x, state_t& xd, const double)
     {
-        // static constexpr double sigma = 10.0;
-        // static constexpr double R = 28.0;
-        // static constexpr double b = 8.0 / 3.0;
-
-        // xd[0] = sigma * (x[1] - x[0]);
-        // xd[1] = R * x[0] - x[1] - x[0] * x[2];
-        // xd[2] = -b * x[2] + x[0] * x[1];
-
         // current state variables
         const auto T4 = x[0];                                                   // history[_][0]
         const auto T3P = x[1];                                                  // history[_][1]
@@ -111,10 +107,10 @@ int main()
         // delayed state variables
         const auto CURR_IDX = history.size();
         
-        const auto T0T_IDX = std::max(static_cast<size_t>(0), CURR_IDX - delay.getT0TIndexOffset());
-        const auto T03Z_IDX = std::max(static_cast<size_t>(0), CURR_IDX - delay.getT03ZIndexOffset());
-        const auto T0S_IDX = std::max(static_cast<size_t>(0), CURR_IDX - delay.getT0SIndexOffset());
-        const auto TOS2_IDX = std::max(static_cast<size_t>(0), CURR_IDX - delay.getT0S2IndexOffset());
+        const auto T0T_IDX = std::max(0, static_cast<int>(CURR_IDX - delay.getT0TIndexOffset()));
+        const auto T03Z_IDX = std::max(0, static_cast<int>(CURR_IDX - delay.getT03ZIndexOffset()));
+        const auto T0S_IDX = std::max(0, static_cast<int>(CURR_IDX - delay.getT0SIndexOffset()));
+        const auto TOS2_IDX = std::max(0, static_cast<int>(CURR_IDX - delay.getT0S2IndexOffset()));
 
         const auto TSH_T0T = history[T0T_IDX][0];
         const auto TSHz_T0S = history[T0S_IDX][4];
@@ -151,18 +147,18 @@ int main()
         xd[4] = dTSHz;
     };
 
-    auto integrator = RK4();
-    auto recorder = Recorder();
+    double t = 0.0;
+    constexpr double t_end = 60.0 * 60.0;
 
-    constexpr double t_end = 10.0;
-    history.reserve(static_cast<size_t>(t_end / Delay::dt) + 1);
+    history.reserve(static_cast<size_t>(t_end / Delay::dt) + 2);
 
     const auto x0 = FullState({0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
     history.emplace_back(x0);
 
-    auto x = state_t(x0.begin(), x0.begin() + 5);
 
-    double t = 0.0;
+    auto x = state_t(x0.begin(), x0.begin() + c_NumDifferentialStateVariables);
+    auto integrator = RK4();
+    auto recorder = Recorder();
 
     while (t < t_end)
     {
