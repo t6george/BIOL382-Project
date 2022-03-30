@@ -56,14 +56,14 @@ function thyroid
     
     % set simulation parameters
     ODEFUN = @thyroidddt;
-    Tend = 360;
+    Tend = 3600;
     
     % set initial condition: state = [T4, T3P, T3c, TSH, TSHz]
-    T4_0 = 0.0;
-    T3P_0 = 0.0;
-    T3c_0 = 0.0;
-    TSH_0 = 0.0;
-    TSHz_0 = 0.0;
+    T4_0 = 3.0909e+05;
+    T3P_0 = 1.3026e+06;
+    T3c_0 = 3.4689e-09;
+    TSH_0 = 1.8189e+05;
+    TSHz_0 = 0.0619;
     S0 = [T4_0, T3P_0, T3c_0, TSH_0, TSHz_0];
 
 
@@ -72,6 +72,8 @@ function thyroid
     T03Z = 3600.0;
     T0S = 120.0;
     T0S2 = 3240.0;
+
+    % opts = ddeset('RelTol', 1e-2, 'AbsTol', 1e-4);
     
     % simulate system
     sol=dde23( ...
