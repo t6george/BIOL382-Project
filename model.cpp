@@ -9,15 +9,15 @@ struct Constants
 {
     const double aT = 0.1;
     const double aS = 0.4;
-    const double aS2 = 2.6 / pow(10.0, 5);
-    const double a31 = 2.6 / pow(10.0, 2);
-    const double a32 = 1.3 / pow(10.0, 5);
+    const double aS2 = 2.6e-5;
+    const double a31 = 2.6e-2;
+    const double a32 = 1.3e-5;
     
-    const double BT = 1.1 / pow(10.0, 6);
-    const double BS = 2.3 / pow(10.0, 4);
+    const double BT = 1.1e-6;
+    const double BS = 2.3e-4;
     const double BS2 = 140.0;
-    const double B31 = 8.0 / pow(10.0, 6);
-    const double B32 = 8.3 / pow(10.0, 4);
+    const double B31 = 8.0e-6;
+    const double B32 = 8.3e-4;
     
     const double GT = 3.4;
     const double GH = 817.0;
@@ -29,10 +29,10 @@ struct Constants
     const double KM1 = 500.0;
     const double KM2 = 1.0;
     
-    const double K30 = 2 * pow(10.0, 9);
-    const double K41 = 2 * pow(10.0, 10);
-    const double K42 = 2 * pow(10.0, 8);
-    const double K31 = 2 * pow(10.0, 9);
+    const double K30 = 2e9;
+    const double K41 = 2e10;
+    const double K42 = 2e8;
+    const double K31 = 2e9;
     
     const double k = 1.0;
     
@@ -99,7 +99,7 @@ int main()
     auto recorder = Recorder();
     auto curr_state = CurrentState();
 
-    auto lorenz = [&cs = std::as_const(cs), &delay = std::as_const(delay), &state = curr_state, &recorder]
+    auto thyroid = [&cs = std::as_const(cs), &delay = std::as_const(delay), &state = curr_state, &recorder]
         (const state_t& x, state_t& xd, const double)
     {
         // current state variables
@@ -191,10 +191,10 @@ int main()
             curr_state.T3R
         });
 
-        integrator(lorenz, x, t, Delay::dt);
+        integrator(thyroid, x, t, Delay::dt);
     }
 
-    recorder.csv("lorenz", {"t", "T4", "T3P", "T3c", "TSH", "TSHz", "T4th", "FT3", "FT4", "T3N", "T3R"});
+    recorder.csv("thyroid", {"t", "T4", "T3P", "T3c", "TSH", "TSHz", "T4th", "FT3", "FT4", "T3N", "T3R"});
 
     return 0;
 }
