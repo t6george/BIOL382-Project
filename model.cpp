@@ -5,6 +5,7 @@ using namespace asc;
 
 static constexpr int c_Precision = 9;
 
+
 struct Constants
 {
     const double aT = 0.1;
@@ -50,25 +51,34 @@ struct Constants
     const double IBS = 8.0;
 };
 
+
 class DelayedState
 {
 public:
-    DelayedState(const double dt, const double t_end)
+    DelayedState(const double dt, const double TSH_0, const double TSHz_0, const double FT4_0, const double T3R_0)
     {
-        const auto max_history_len = static_cast<size_t>(t_end / dt) + 2;
+        TSH_history.resize(static_cast<size_t>(T0T / dt) + 2);
+        TSHz_history.resize(static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2);
+        FT4_history.resize(static_cast<size_t>(T03Z / dt) + 2);
+        T3R_history.resize(static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2);
 
-        TSH_history.reserve(max_history_len - static_cast<size_t>(T0T / dt));
-        TSHz_history.reserve(max_history_len - static_cast<size_t>(std::min(T0S, T0S2) / dt));
-        FT4_history.reserve(max_history_len - static_cast<size_t>(T03Z / dt));
-        T3R_history.reserve(max_history_len - static_cast<size_t>(std::min(T0S, T0S2) / dt));
+        TSH_history[0] = TSH_0;
+        TSHz_history[0] = TSHz_0;
+        FT4_history[0] = FT4_0;
+        T3R_history[0] = T3R_0;
     }
 
     void update_history(const double t, const double TSH, const double TSHz, const double FT4, const double T3R) noexcept
     {
-        TSH_history.emplace_back(TSH);
-        TSHz_history.emplace_back(TSHz);
-        FT4_history.emplace_back(FT4);
-        T3R_history.emplace_back(T3R);
+        TSH_history[TSH_idx] = TSH;
+        TSHz_history[TSHz_idx] = TSHz;
+        FT4_history[FT4_idx] = FT4;
+        T3R_history[T3R_idx] = T3R;
+
+        TSH_idx = (TSH_idx + 1) % TSH_history.size();
+        TSHz_idx = (TSHz_idx + 1) % TSHz_history.size();
+        FT4_idx = (FT4_idx + 1) % FT4_history.size();
+        T3R_idx = (T3R_idx + 1) % T3R_history.size();
 
         if (t >= T0T) ++T0T_idx;
         if (t >= T03Z) ++T03Z_idx;
@@ -76,17 +86,17 @@ public:
         if (t >= T0S2) ++T0S2_idx;
     }
 
-    double getTSH_T0T() const noexcept { return TSH_history[T0T_idx]; }
+    double getTSH_T0T() const noexcept { return TSH_history[T0T_idx % TSH_history.size()]; }
 
-    double getTSHz_T0S() const noexcept { return TSHz_history[T0S_idx]; }
+    double getTSHz_T0S() const noexcept { return TSHz_history[T0S_idx % TSHz_history.size()]; }
 
-    double getTSHz_T0S2() const noexcept { return TSHz_history[T0S2_idx]; }
+    double getTSHz_T0S2() const noexcept { return TSHz_history[T0S2_idx % TSHz_history.size()]; }
 
-    double getFT4_T03Z() const noexcept { return FT4_history[T03Z_idx]; }
+    double getFT4_T03Z() const noexcept { return FT4_history[T03Z_idx % FT4_history.size()]; }
 
-    double getT3R_T0S() const noexcept { return T3R_history[T0S_idx]; }
+    double getT3R_T0S() const noexcept { return T3R_history[T0S_idx % T3R_history.size()]; }
 
-    double getT3R_T0S2() const noexcept { return T3R_history[T0S2_idx]; }
+    double getT3R_T0S2() const noexcept { return T3R_history[T0S2_idx % T3R_history.size()]; }
 
 
 private:
@@ -105,7 +115,13 @@ private:
     size_t T03Z_idx = 0;
     size_t T0S_idx = 0;
     size_t T0S2_idx = 0;
+
+    size_t TSH_idx = 1;
+    size_t TSHz_idx = 1;
+    size_t FT4_idx = 1;
+    size_t T3R_idx = 1;
 };
+
 
 struct CurrentState
 {
@@ -119,34 +135,52 @@ struct CurrentState
     double FT4 = 0.0;
     double T3N = 0.0;
     double T3R = 0.0;
+
+    void populate(const double T4, const double T3P, const double T3c, const double TSH, const double TSHz, const Constants& cs) noexcept
+    {
+        this->T4 = T4;
+        this->T3P = T3P;
+        this->T3c = T3c;
+        this->TSH = TSH;
+        this->TSHz = TSHz;
+
+        T4th = cs.GT * TSH / (TSH + cs.DT);
+        FT3 = T3P / (1 + cs.K30 * cs.TBG);
+        FT4 = T4 / (1 + cs.K41 * cs.TBG + cs.K42 * cs.TBPA);
+        T3N = T3c / (1 + cs.K31 * cs.IBS);
+        T3R = cs.GR * T3N / (T3N + cs.DR);
+    }
 };
 
 
 int main()
 {
+    // time params
     double t = 0.0;
     constexpr double dt = 0.01;
-    constexpr double t_end = 60.0 * 60.0 + dt;
+    constexpr double t_end = 60.0 * 60.0 * 24.0;
 
     const auto cs = Constants();
-    auto delay = DelayedState(dt, t_end);
-    auto curr_state = CurrentState();
 
+    // initial conditions
+    auto curr_state = CurrentState();
+    const double T4_0 = 3.0909e+05;
+    const double T3P_0 = 1.3026e+06;
+    const double T3c_0 = 3.4689e-09;
+    const double TSH = 1.8189e+05;
+    const double TSHz = 0.0619;
+    curr_state.populate(T4_0, T3P_0, T3c_0, TSH, TSHz, cs);
+
+    // delay state
+    auto delay = DelayedState(dt, curr_state.TSH, curr_state.TSHz, curr_state.FT4, curr_state.T3R);
+
+
+    // model
     auto thyroid = [&cs = std::as_const(cs), &t = std::as_const(t), &state = curr_state, &delay]
         (const state_t& x, state_t& xd, const double)
     {
         // current state variables
-        state.T4 = x[0];
-        state.T3P = x[1];
-        state.T3c = x[2];
-        state.TSH = x[3];
-        state.TSHz = x[4];
-
-        state.T4th = cs.GT * state.TSH / (state.TSH + cs.DT);
-        state.FT3 = state.T3P / (1 + cs.K30 * cs.TBG);
-        state.FT4 = state.T4 / (1 + cs.K41 * cs.TBG + cs.K42 * cs.TBPA);
-        state.T3N = state.T3c / (1 + cs.K31 * cs.IBS);
-        state.T3R = cs.GR * state.T3N / (state.T3N + cs.DR);
+        state.populate(x[0], x[1], x[2], x[3], x[4], cs);
 
         // delay state variables
         const auto TSH_T0T = delay.getTSH_T0T();
@@ -184,25 +218,11 @@ int main()
         xd[4] = dTSHz;
     };
 
-    // initial conditions
-    curr_state.T4 = 3.0909e+05;
-    curr_state.T3P = 1.3026e+06;
-    curr_state.T3c = 3.4689e-09;
-    curr_state.TSH = 1.8189e+05;
-    curr_state.TSHz = 0.0619;
-    curr_state.T4th = cs.GT * curr_state.TSH / (curr_state.TSH + cs.DT);
-    curr_state.FT3 = curr_state.T3P / (1 + cs.K30 * cs.TBG);
-    curr_state.FT4 = curr_state.T4 / (1 + cs.K41 * cs.TBG + cs.K42 * cs.TBPA);
-    curr_state.T3N = curr_state.T3c / (1 + cs.K31 * cs.IBS);
-    curr_state.T3R = cs.GR * curr_state.T3N / (curr_state.T3N + cs.DR);
-
     auto integrator = RK4();
     auto recorder = Recorder();
     recorder.precision = c_Precision;
 
     auto x = state_t({curr_state.T4, curr_state.T3P, curr_state.T3c, curr_state.TSH, curr_state.TSHz});
-
-    delay.update_history(t, curr_state.TSH, curr_state.TSHz, curr_state.FT4, curr_state.T3R);
 
     while (t < t_end)
     {
@@ -227,4 +247,3 @@ int main()
 
     return 0;
 }
-
