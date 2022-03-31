@@ -1,3 +1,4 @@
+#include <iostream>
 #include "ascent/Ascent.h"
 
 
@@ -158,17 +159,17 @@ int main()
     // time params
     double t = 0.0;
     constexpr double dt = 0.01;
-    constexpr double t_end = 60.0 * 60.0 * 24.0;
+    constexpr double t_end = 60.0 * 60.0 * 24.0 * 25.0;
 
     const auto cs = Constants();
 
     // initial conditions
     auto curr_state = CurrentState();
-    const double T4_0 = 3.0909e+05;
-    const double T3P_0 = 1.3026e+06;
-    const double T3c_0 = 3.4689e-09;
-    const double TSH = 1.8189e+05;
-    const double TSHz = 0.0619;
+    const double T4_0 = 3.0909e+05 * 0.85;
+    const double T3P_0 = 1.3026e+06 * 0.85;
+    const double T3c_0 = 3.4689e-09 * 0.85;
+    const double TSH = 1.8189e+05 * 0.85;
+    const double TSHz = 0.0619 * 0.85;
     curr_state.populate(T4_0, T3P_0, T3c_0, TSH, TSHz, cs);
 
     // delay state
@@ -224,26 +225,34 @@ int main()
 
     auto x = state_t({curr_state.T4, curr_state.T3P, curr_state.T3c, curr_state.TSH, curr_state.TSHz});
 
+    unsigned num_iters = 0;
+    constexpr unsigned iter_sample_size = 100;
+
     while (t < t_end)
     {
-        recorder({
-            t,
-            curr_state.T4,
-            curr_state.T3P, 
-            curr_state.T3c, 
-            curr_state.TSH, 
-            curr_state.TSHz, 
-            curr_state.T4th, 
-            curr_state.FT3, 
-            curr_state.FT4, 
-            curr_state.T3N, 
-            curr_state.T3R
-        });
+	    if ((num_iters++) % iter_sample_size == 0)
+	    {
+            recorder({
+                t,
+                curr_state.T4,
+                curr_state.T3P, 
+                curr_state.T3c, 
+                curr_state.TSH, 
+                curr_state.TSHz, 
+                curr_state.T4th, 
+                curr_state.FT3, 
+                curr_state.FT4, 
+                curr_state.T3N, 
+                curr_state.T3R
+            });
+	    }
 
         integrator(thyroid, x, t, dt);
     }
 
     recorder.csv("thyroid", {"t", "T4", "T3P", "T3c", "TSH", "TSHz", "T4th", "FT3", "FT4", "T3N", "T3R"});
+
+    std::cout << "The simulation has completed!" << std::endl;
 
     return 0;
 }
