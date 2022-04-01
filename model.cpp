@@ -6,50 +6,63 @@ using namespace asc;
 
 static constexpr int c_Precision = 9;
 
+// Target unit for concentration: pmol/l
+// Target unit for rates of change: pmol/(sl)
+
+const double mol = 1.0e12;
+const double umol = 1.0e6;
+const double nmol = 1.0e3;
+const double pmol = 1.0e0;
+const double fmol = 1.0e-3;
+
+const double s = 1.0;
+const double l = 1.0;
+
+const double mU = 100.0 / 6.0 * nmol / s;
 
 struct Constants
 {
-    const double aT = 0.1;
-    const double aS = 0.4;
-    const double aS2 = 2.6e-5;
-    const double a31 = 2.6e-2;
-    const double a32 = 1.3e-5;
+    const double aT = 0.1 / l;
+    const double aS = 0.4 / l;
+    const double aS2 = 2.6e-5 / l;
+    const double a31 = 2.6e-2 / l;
+    const double a32 = 1.3e-5 / l;
     
-    const double BT = 1.1e-6;
-    const double BS = 2.3e-4;
-    const double BS2 = 140.0;
-    const double B31 = 8.0e-6;
-    const double B32 = 8.3e-4;
+    const double BT = 1.1e-6 / s;
+    const double BS = 2.3e-4 / s;
+    const double BS2 = 140.0 / s;
+    const double B31 = 8.0e-6 / s;
+    const double B32 = 8.3e-4 / s;
     
-    const double GT = 3.4;
-    const double GH = 817.0;
-    const double GD1 = 22.0;
-    const double GD2 = 4.3;
-    const double GT3 = 394.0;
-    const double GR = 1.0;
+    const double GT = 3.4 * pmol / s;
+    const double GH = 817.0 * mU / s;
+    const double GD1 = 22.0 * nmol / s;
+    const double GD2 = 4.3 * fmol / s;
+    const double GT3 = 394.0 * fmol / s;
+    const double GR = 1.0 * mol / s;
     
-    const double KM1 = 500.0;
-    const double KM2 = 1.0;
+    const double KM1 = 500.0 * nmol / l;
+    const double KM2 = 1.0 * nmol / l;
     
-    const double K30 = 2e9;
-    const double K41 = 2e10;
-    const double K42 = 2e8;
-    const double K31 = 2e9;
+    const double K30 = 2e9 * l / mol;
+    const double K41 = 2e10 * l / mol;
+    const double K42 = 2e8 * l / mol;
+    const double K31 = 2e9 * l / mol;
     
-    const double k = 1.0;
+    const double k = 1.0 * mU / l;
     
-    const double DH = 47.0;
-    const double DS = 50.0;
-    const double DT = 2.75;
-    const double DR = 100.0;
+    const double DH = 47.0 * nmol / l;
+    const double DS = 50.0 * mU / l;
+    const double DT = 2.75 * mU / l;
+    const double DR = 100.0 * pmol / l;
     
-    const double SS = 100.0;
-    const double LS = 1.68;
+    const double SS = 100.0 * l / mU;
+    const double LS = 1.68 * l / umol;
     
-    const double TRH = 6.9;
-    const double TBG = 300.0;
-    const double TBPA = 4.5;
-    const double IBS = 8.0;
+    const double TRH = 6.9 * nmol / l;
+    const double TBG = 300.0 * nmol / l;
+    const double TBPA = 4.5 * umol / l;
+    const double IBS = 8.0 * umol / l;
 };
 
 
@@ -165,11 +178,11 @@ int main()
 
     // initial conditions
     auto curr_state = CurrentState();
-    const double T4_0 = 3.0909e+05 * 0.85;
-    const double T3P_0 = 1.3026e+06 * 0.85;
-    const double T3c_0 = 3.4689e-09 * 0.85;
-    const double TSH = 1.8189e+05 * 0.85;
-    const double TSHz = 0.0619 * 0.85;
+    const double T4_0 = 3.0909e+05;
+    const double T3P_0 = 8.9607e+03;
+    const double T3c_0 = 2.8872e-06;
+    const double TSH = 3.0315e+09;
+    const double TSHz = 0.0701;
     curr_state.populate(T4_0, T3P_0, T3c_0, TSH, TSHz, cs);
 
     // delay state
