@@ -9,24 +9,24 @@ static constexpr int c_Precision = 9;
 // Target unit for concentration: pmol/l
 // Target unit for rates of change: pmol/(sl)
 
-const double mol = 1.0;
-//const double umol = 1.0e6;
-//const double nmol = 1.0e3;
-//const double pmol = 1.0e0;
-//const double fmol = 1.0e-3;
+static constexpr double mol = 1.0;
+// static constexpr double umol = 1.0e6;
+// static constexpr double nmol = 1.0e3;
+// static constexpr double pmol = 1.0e0;
+// static constexpr double fmol = 1.0e-3;
 
-const double s = 1.0;
-const double l = 1.0;
+static constexpr double s = 1.0;
+static constexpr double l = 1.0;
 
-// const double mU = 100.0 / 6.0 * nmol / s;
-const double mU = 1.0;
+// static constexpr double mU = 100.0 / 6.0 * nmol / s;
+static constexpr double mU = 1.0;
 
-const double ng = 1.0;
+static constexpr double ng = 1.0;
 
 
 struct Constants
 {
-        const double aT = 0.1 / l;
+    const double aT = 0.1 / l;
     const double aS = 0.4 / l;
     const double aS2 = 2.6e5 / l;
     const double a31 = 2.6e-2 / l;
