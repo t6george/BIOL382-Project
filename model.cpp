@@ -6,62 +6,79 @@ using namespace asc;
 
 static constexpr int c_Precision = 9;
 
+// Target unit for concentration: pmol/l
+// Target unit for rates of change: pmol/(sl)
+
+static constexpr double mol = 1.0;
+// static constexpr double umol = 1.0e6;
+// static constexpr double nmol = 1.0e3;
+// static constexpr double pmol = 1.0e0;
+// static constexpr double fmol = 1.0e-3;
+
+static constexpr double s = 1.0;
+static constexpr double l = 1.0;
+
+// static constexpr double mU = 100.0 / 6.0 * nmol / s;
+static constexpr double mU = 1.0;
+
+static constexpr double ng = 1.0;
+
 
 struct Constants
 {
-    const double aT = 0.1;
-    const double aS = 0.4;
-    const double aS2 = 2.6e-5;
-    const double a31 = 2.6e-2;
-    const double a32 = 1.3e-5;
-    
-    const double BT = 1.1e-6;
-    const double BS = 2.3e-4;
-    const double BS2 = 140.0;
-    const double B31 = 8.0e-6;
-    const double B32 = 8.3e-4;
-    
-    const double GT = 3.4;
-    const double GH = 817.0;
-    const double GD1 = 22.0;
-    const double GD2 = 4.3;
-    const double GT3 = 394.0;
-    const double GR = 1.0;
-    
-    const double KM1 = 500.0;
-    const double KM2 = 1.0;
-    
-    const double K30 = 2e9;
-    const double K41 = 2e10;
-    const double K42 = 2e8;
-    const double K31 = 2e9;
-    
-    const double k = 1.0;
-    
-    const double DH = 47.0;
-    const double DS = 50.0;
-    const double DT = 2.75;
-    const double DR = 100.0;
-    
-    const double SS = 100.0;
-    const double LS = 1.68;
-    
-    const double TRH = 6.9;
-    const double TBG = 300.0;
-    const double TBPA = 4.5;
-    const double IBS = 8.0;
-};
+    const double aT = 0.1 / l;
+    const double aS = 0.4 / l;
+    const double aS2 = 2.6e5 / l;
+    const double a31 = 2.6e-2 / l;
+    const double a32 = 1.3e5 / l;
 
+    const double BT = 1.1e-6 / s;
+    const double BS = 2.3e-4 / s;
+    const double BS2 = 140.0 / s;
+    const double B31 = 8.0e-6 / s;
+    const double B32 = 8.3e-4 / s;
+
+    const double GT = 3.375e-12 * mol / s;
+    const double GH = 473.0214 * mU / s;
+    const double GD1 = 2.3527e-8 * mol / s;
+    const double GD2 = 4.3e-15 * mol / s;
+    const double GT3 = 1.8882e-13 * mol / s;
+    const double GR = 1.0 * mol / s;
+
+    const double KM1 = 5.0e-7 * mol / l;
+    const double KM2 = 1.0e-9 * mol / l;
+
+    const double K30 = 2e9 * l / mol;
+    const double K41 = 2e10 * l / mol;
+    const double K42 = 2e8 * l / mol;
+    const double K31 = 2e9 * l / mol;
+
+    // Not in provided code
+    const double k = 1.0 * mU / l;
+
+    const double DH = 4.7e-8 * mol / l;
+    const double DS = 50.0 * mU / l;
+    const double DT = 2.75 * mU / l;
+    const double DR = 1.0e-10 * mol / l;
+
+    const double SS = 100.0 * l / mU;
+    const double LS = 1.6879e6 * l / mol;
+
+    const double TRH = 6.9e-9 * mol / l;
+    const double TBG = 3.0e-7 * mol / l;
+    const double TBPA = 4.5e-6 * mol / l; // Not in provided code
+    const double IBS = 8.0e-6 * mol / l;
+};
 
 class DelayedState
 {
 public:
     DelayedState(const double dt, const double TSH_0, const double TSHz_0, const double FT4_0, const double T3R_0)
     {
-        TSH_history.resize(static_cast<size_t>(T0T / dt) + 2);
-        TSHz_history.resize(static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2);
-        FT4_history.resize(static_cast<size_t>(T03Z / dt) + 2);
-        T3R_history.resize(static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2);
+        TSH_history.resize(4 * (static_cast<size_t>(T0T / dt) + 2));
+        TSHz_history.resize(4 * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
+        FT4_history.resize(4 * (static_cast<size_t>(T03Z / dt) + 2));
+        T3R_history.resize(4 * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
 
         TSH_history[0] = TSH_0;
         TSHz_history[0] = TSHz_0;
@@ -76,15 +93,20 @@ public:
         FT4_history[FT4_idx] = FT4;
         T3R_history[T3R_idx] = T3R;
 
-        TSH_idx = (TSH_idx + 1) % TSH_history.size();
-        TSHz_idx = (TSHz_idx + 1) % TSHz_history.size();
-        FT4_idx = (FT4_idx + 1) % FT4_history.size();
-        T3R_idx = (T3R_idx + 1) % T3R_history.size();
+	if (t > last_t)
+	{
+	    last_t = t;
 
-        if (t >= T0T) ++T0T_idx;
-        if (t >= T03Z) ++T03Z_idx;
-        if (t >= T0S) ++T0S_idx;
-        if (t >= T0S2) ++T0S2_idx;
+            TSH_idx = (TSH_idx + 1) % TSH_history.size();
+            TSHz_idx = (TSHz_idx + 1) % TSHz_history.size();
+            FT4_idx = (FT4_idx + 1) % FT4_history.size();
+            T3R_idx = (T3R_idx + 1) % T3R_history.size();
+
+            if (t >= T0T) ++T0T_idx;
+            if (t >= T03Z) ++T03Z_idx;
+            if (t >= T0S) ++T0S_idx;
+            if (t >= T0S2) ++T0S2_idx;
+	}
     }
 
     double getTSH_T0T() const noexcept { return TSH_history[T0T_idx % TSH_history.size()]; }
@@ -101,6 +123,8 @@ public:
 
 
 private:
+
+    double last_t = 0.0;
 
     std::vector<double> TSH_history;
     std::vector<double> TSHz_history;
@@ -159,17 +183,17 @@ int main()
     // time params
     double t = 0.0;
     constexpr double dt = 0.01;
-    constexpr double t_end = 60.0 * 60.0 * 24.0 * 25.0;
+    constexpr double t_end = 60.0 * 60.0 * 24.0 * 10.0;
 
     const auto cs = Constants();
 
     // initial conditions
     auto curr_state = CurrentState();
-    const double T4_0 = 3.0909e+05 * 0.85;
-    const double T3P_0 = 1.3026e+06 * 0.85;
-    const double T3c_0 = 3.4689e-09 * 0.85;
-    const double TSH = 1.8189e+05 * 0.85;
-    const double TSHz = 0.0619 * 0.85;
+    const double T4_0 = 1.1399e-7;
+    const double T3P_0 = 3.1622e-9;
+    const double T3c_0 = 1.0944e-8; // Assuming T3z == T3c
+    const double TSH = 1.8855;
+    const double TSHz = 2.0134;
     curr_state.populate(T4_0, T3P_0, T3c_0, TSH, TSHz, cs);
 
     // delay state
@@ -177,8 +201,8 @@ int main()
 
 
     // model
-    auto thyroid = [&cs = std::as_const(cs), &t = std::as_const(t), &state = curr_state, &delay]
-        (const state_t& x, state_t& xd, const double)
+    auto thyroid = [&cs = std::as_const(cs), &state = curr_state, &delay]
+        (const state_t& x, state_t& xd, const double t)
     {
         // current state variables
         state.populate(x[0], x[1], x[2], x[3], x[4], cs);
@@ -248,6 +272,7 @@ int main()
 	    }
 
         integrator(thyroid, x, t, dt);
+	    // delay.update_history(t, curr_state.TSH, curr_state.TSHz, curr_state.FT4, curr_state.T3R);
     }
 
     recorder.csv("thyroid", {"t", "T4", "T3P", "T3c", "TSH", "TSHz", "T4th", "FT3", "FT4", "T3N", "T3R"});
