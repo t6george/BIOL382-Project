@@ -1,6 +1,9 @@
 #include <iostream>
-#include "ascent/Ascent.h"
 #include <cmath>
+#include <random>
+
+#include "ascent/Ascent.h"
+
 
 using namespace asc;
 
@@ -186,15 +189,44 @@ struct CurrentState
     }
 };
 
+class Hypothalmus
+{
+public:
+    double get_TRH(const double t, const Constants& cs) noexcept
+    {
+        // Sinusoidal component
+        double TRH = cs.TRH + cs.TRH * sinusoidal_amplitude * std::cos(2 * M_PI * t / 86400 - phase);
+
+        // Noise
+        TRH *= std::max(0.0, noise_distribution(uniform_rng));
+
+        return TRH;
+    }
+
+private:
+
+    const double sinusoidal_amplitude = 0.6;
+    const double phase = M_PI * 5 / 12;
+
+    const double noise_mean = 1.0;
+    const double noise_sigma = 0.5;
+    const unsigned long noise_seed = 0;
+
+    std::default_random_engine uniform_rng = std::default_random_engine(noise_seed);
+    std::normal_distribution<double> noise_distribution = std::normal_distribution<double>(noise_mean, noise_sigma);
+};
+
 
 int main()
 {
     // time params
     double t = 0.0;
-    constexpr double dt = 0.01;
+    constexpr double dt = 0.005;
     constexpr double t_end = 60.0 * 60.0 * 24.0 * 10.0;
 
     const auto cs = Constants();
+
+    auto hypothalmus = Hypothalmus();
 
     // initial conditions
     auto curr_state = CurrentState();
@@ -210,7 +242,7 @@ int main()
 
 
     // model
-    auto thyroid = [&cs = std::as_const(cs), &state = curr_state, &delay]
+    auto thyroid = [&cs = std::as_const(cs), &state = curr_state, &delay, &hypothalmus]
         (const state_t& x, state_t& xd, const double t)
     {
         // current state variables
@@ -226,10 +258,8 @@ int main()
         const auto TRH_T0S = delay.getTRH_T0S();
         const auto TRH_T0S2 = delay.getTRH_T0S2();
 
-        double TRH_t = cs.TRH + cs.TRH * 0.6 * std::cos(2 * M_PI * t / 86400);
-
         // update history state
-        delay.update_history(t, state.TSH, state.TSHz, state.FT4, state.T3R, TRH_t);
+        delay.update_history(t, state.TSH, state.TSHz, state.FT4, state.T3R, hypothalmus.get_TRH(t, cs));
 
         // differential equations
         const auto dT4 = cs.aT * cs.GT * TSH_T0T / (TSH_T0T + cs.DT) - cs.BT * state.T4;
@@ -263,12 +293,12 @@ int main()
     auto x = state_t({curr_state.T4, curr_state.T3P, curr_state.T3c, curr_state.TSH, curr_state.TSHz});
 
     unsigned num_iters = 0;
-    constexpr unsigned iter_sample_size = 100;
+    constexpr auto iter_sample_size = static_cast<unsigned>(1 / dt);
 
     while (t < t_end)
     {
-            if ((num_iters++) % iter_sample_size == 0)
-            {
+        if ((num_iters++) % iter_sample_size == 0)
+        {
             recorder({
                 t,
                 curr_state.T4,
@@ -282,10 +312,9 @@ int main()
                 curr_state.T3N,
                 curr_state.T3R
             });
-            }
+        }
 
         integrator(thyroid, x, t, dt);
-            // delay.update_history(t, curr_state.TSH, curr_state.TSHz, curr_state.FT4, curr_state.T3R);
     }
 
     recorder.csv("thyroid", {"t", "T4", "T3P", "T3c", "TSH", "TSHz", "T4th", "FT3", "FT4", "T3N", "T3R"});
