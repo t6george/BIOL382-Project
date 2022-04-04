@@ -56,7 +56,7 @@ struct Constants
     const double K42 = 2e8 * l / mol;
     const double K31 = 2e9 * l / mol;
 
-    // Not in provided code
+    // Called k_Dio in the code
     const double k = 1.0 * mU / l;
 
     const double DH = 4.7e-8 * mol / l;
@@ -69,7 +69,7 @@ struct Constants
 
     const double TRH = 6.9e-9 * mol / l;
     const double TBG = 3.0e-7 * mol / l;
-    const double TBPA = 4.5e-6 * mol / l; // Not in provided code
+    const double TBPA = 4.5e-6 * mol / l;
     const double IBS = 8.0e-6 * mol / l;
 };
 
@@ -192,15 +192,28 @@ struct CurrentState
 class Hypothalmus
 {
 public:
-    double get_TRH(const double t, const Constants& cs) noexcept
+    inline double get_TRH_constant(const double t, const Constants& cs) const noexcept
     {
-        // Sinusoidal component
-        double TRH = cs.TRH + cs.TRH * sinusoidal_amplitude * std::cos(2 * M_PI * t / 86400 - phase);
+        (void) t;
+        return cs.TRH;
+    }
 
-        // Noise
-        TRH *= std::max(0.0, noise_distribution(uniform_rng));
+    inline double get_TRH_oscillatory(const double t, const Constants& cs) const noexcept
+    {
+        return cs.TRH + cs.TRH * sinusoidal_amplitude * std::cos(2 * M_PI * t / 86400 - phase);
+    }
 
-        return TRH;
+    inline double get_TRH(const double t, const Constants& cs) noexcept
+    {
+        const auto curr_interval = static_cast<unsigned>(t / noise_sample_interval);
+
+        if (curr_interval != prev_interval)
+        {
+            prev_interval = curr_interval;
+            noise = std::max(0.0, noise_distribution(uniform_rng));
+        }
+
+        return get_TRH_oscillatory(t, cs) * noise;
     }
 
 private:
@@ -211,9 +224,13 @@ private:
     const double noise_mean = 1.0;
     const double noise_sigma = 0.5;
     const unsigned long noise_seed = 0;
+    const double noise_sample_interval = 100.0;
 
     std::default_random_engine uniform_rng = std::default_random_engine(noise_seed);
     std::normal_distribution<double> noise_distribution = std::normal_distribution<double>(noise_mean, noise_sigma);
+
+    double noise = 0.0;
+    unsigned prev_interval = -1;
 };
 
 
@@ -222,7 +239,7 @@ int main()
     // time params
     double t = 0.0;
     constexpr double dt = 0.005;
-    constexpr double t_end = 60.0 * 60.0 * 24.0 * 10.0;
+    constexpr double t_end = 60.0 * 60.0 * 24.0 * 25.0;
 
     const auto cs = Constants();
 
@@ -230,16 +247,15 @@ int main()
 
     // initial conditions
     auto curr_state = CurrentState();
-    const double T4_0 = 1.1399e-7;
-    const double T3P_0 = 3.1622e-9;
-    const double T3c_0 = 1.0944e-8; // Assuming T3z == T3c
-    const double TSH = 1.8855;
-    const double TSHz = 2.0134;
-    curr_state.populate(T4_0, T3P_0, T3c_0, TSH, TSHz, cs);
+    const double T4_0 = 1.2202e-7;
+    const double T3P_0 = 3.1615e-9;
+    const double T3c_0 = 1.1701e-8; // Assuming T3z == T3c
+    const double TSH_0 = 1.8157;
+    const double TSHz_0 = 1.9389;
+    curr_state.populate(T4_0, T3P_0, T3c_0, TSH_0, TSHz_0, cs);
 
     // delay state
     auto delay = DelayedState(dt, curr_state.TSH, curr_state.TSHz, curr_state.FT4, curr_state.T3R, cs.TRH);
-
 
     // model
     auto thyroid = [&cs = std::as_const(cs), &state = curr_state, &delay, &hypothalmus]
@@ -293,7 +309,7 @@ int main()
     auto x = state_t({curr_state.T4, curr_state.T3P, curr_state.T3c, curr_state.TSH, curr_state.TSHz});
 
     unsigned num_iters = 0;
-    constexpr auto iter_sample_size = static_cast<unsigned>(1 / dt);
+    constexpr auto iter_sample_size = static_cast<unsigned>(5 / dt);
 
     while (t < t_end)
     {
