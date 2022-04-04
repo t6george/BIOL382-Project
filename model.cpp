@@ -7,6 +7,7 @@
 
 using namespace asc;
 
+static constexpr size_t c_NumComputationsPerDt = 2;
 static constexpr int c_Precision = 9;
 
 // Target unit for concentration: pmol/l
@@ -78,11 +79,11 @@ class DelayedState
 public:
     DelayedState(const double dt, const double TSH_0, const double TSHz_0, const double FT4_0, const double T3R_0, const double TRH_0)
     {
-        TSH_history.resize(4 * (static_cast<size_t>(T0T / dt) + 2));
-        TSHz_history.resize(4 * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
-        FT4_history.resize(4 * (static_cast<size_t>(T03Z / dt) + 2));
-        T3R_history.resize(4 * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
-        TRH_history.resize(4 * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
+        TSH_history.resize(c_NumComputationsPerDt * (static_cast<size_t>(T0T / dt) + 2));
+        TSHz_history.resize(c_NumComputationsPerDt * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
+        FT4_history.resize(c_NumComputationsPerDt * (static_cast<size_t>(T03Z / dt) + 2));
+        T3R_history.resize(c_NumComputationsPerDt * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
+        TRH_history.resize(c_NumComputationsPerDt * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
 
         TSH_history[0] = TSH_0;
         TSHz_history[0] = TSHz_0;
