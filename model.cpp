@@ -1,6 +1,9 @@
 #include <iostream>
+#include <fstream>
 #include <cmath>
+#include <cstring>
 #include <random>
+#include <thread>
 
 #include "ascent/Ascent.h"
 
@@ -30,6 +33,10 @@ static constexpr double ng = 1.0;
 
 struct Constants
 {
+    Constants() = default;
+
+    Constants(const double GT) : GT{GT} {}
+
     const double aT = 0.1 / l;
     const double aS = 0.4 / l;
     const double aS2 = 2.6e5 / l;
@@ -73,6 +80,7 @@ struct Constants
     const double TBPA = 4.5e-6 * mol / l;
     const double IBS = 8.0e-6 * mol / l;
 };
+
 
 class DelayedState
 {
@@ -190,7 +198,8 @@ struct CurrentState
     }
 };
 
-class Hypothalmus
+
+class Hypothalamus
 {
 public:
     inline double get_TRH_constant(const double t, const Constants& cs) const noexcept
@@ -235,16 +244,16 @@ private:
 };
 
 
-int main()
+double simulate(const bool is_sensitivity_analysis, const double num_days, const double GT = 3.375e-12)
 {
     // time params
     double t = 0.0;
-    constexpr double dt = 0.005;
-    constexpr double t_end = 60.0 * 60.0 * 24.0 * 25.0;
+    constexpr double dt = 0.008;
+    const double t_end = 60.0 * 60.0 * 24.0 * num_days;
 
-    const auto cs = Constants();
+    const auto cs = Constants(GT);
 
-    auto hypothalmus = Hypothalmus();
+    auto hypothalamus = Hypothalamus();
 
     // initial conditions
     auto curr_state = CurrentState();
@@ -259,7 +268,7 @@ int main()
     auto delay = DelayedState(dt, curr_state.TSH, curr_state.TSHz, curr_state.FT4, curr_state.T3R, cs.TRH);
 
     // model
-    auto thyroid = [&cs = std::as_const(cs), &state = curr_state, &delay, &hypothalmus]
+    auto thyroid = [&cs = std::as_const(cs), &state = curr_state, &delay, &hypothalamus]
         (const state_t& x, state_t& xd, const double t)
     {
         // current state variables
@@ -276,7 +285,7 @@ int main()
         const auto TRH_T0S2 = delay.getTRH_T0S2();
 
         // update history state
-        delay.update_history(t, state.TSH, state.TSHz, state.FT4, state.T3R, hypothalmus.get_TRH(t, cs));
+        delay.update_history(t, state.TSH, state.TSHz, state.FT4, state.T3R, hypothalamus.get_TRH_constant(t, cs));
 
         // differential equations
         const auto dT4 = cs.aT * cs.GT * TSH_T0T / (TSH_T0T + cs.DT) - cs.BT * state.T4;
@@ -303,7 +312,7 @@ int main()
         xd[4] = dTSHz;
     };
 
-    auto integrator = RK4();
+    auto integrator = Euler();
     auto recorder = Recorder();
     recorder.precision = c_Precision;
 
@@ -314,7 +323,7 @@ int main()
 
     while (t < t_end)
     {
-        if ((num_iters++) % iter_sample_size == 0)
+        if ((num_iters++) % iter_sample_size == 0 && !is_sensitivity_analysis)
         {
             recorder({
                 t,
@@ -334,9 +343,81 @@ int main()
         integrator(thyroid, x, t, dt);
     }
 
-    recorder.csv("thyroid", {"t", "T4", "T3P", "T3c", "TSH", "TSHz", "T4th", "FT3", "FT4", "T3N", "T3R"});
+    if (!is_sensitivity_analysis)
+    {
+        recorder.csv("thyroid", {"t", "T4", "T3P", "T3c", "TSH", "TSHz", "T4th", "FT3", "FT4", "T3N", "T3R"});
+    }
+    
+    return curr_state.TSH;
+}
 
-    std::cout << "The simulation has completed!" << std::endl;
+
+int main(int argc, char** argv)
+{
+    const bool is_sensitivity_analysis = argc > 1 && strcmp(argv[1], "sensitivity") == 0;
+
+    if (is_sensitivity_analysis)
+    {
+        std::cout << "Starting sensitivity analysis..." << std::endl;
+        constexpr size_t num_workers = 10;
+        constexpr double num_days = 30.0;
+        constexpr double GTt = 0.02;
+        constexpr double GT_max = 1.0;
+
+        auto workers = std::vector<std::thread>();
+
+        auto tsh_steady_states = std::array<double, static_cast<size_t>(GT_max / GTt)>();
+
+        for (size_t id = 0; id < num_workers; ++id)
+        {
+            workers.emplace_back(
+                std::thread([is_sensitivity_analysis, GTt, num_days, num_workers,
+                    &tsh_steady_states] (const size_t id) {
+
+                    constexpr double GT_stride = num_workers * GTt;
+                    double GT = GTt * id;
+                    size_t idx = id;
+
+                    for (;;)
+                    {
+                        tsh_steady_states[idx] =
+                            simulate(is_sensitivity_analysis, num_days, GT * 1e-11);
+
+                        idx += num_workers;
+                        
+                        if (idx >= tsh_steady_states.size()) break;
+
+                        GT += GT_stride;
+                    }
+
+                }, id)
+            );
+        }
+
+        std::for_each(workers.begin(), workers.end(), [] (std::thread &t) { t.join(); });
+
+        auto out_file = std::ofstream();
+        out_file.open("tsh_sensitivity.csv");
+        out_file << "GT,TSH\n";
+
+        for (size_t i = 0; i < tsh_steady_states.size(); ++i)
+        {
+            const auto GT = i * GTt;
+
+            out_file << GT << "," << tsh_steady_states[i] << "\n";
+        }
+
+        out_file.close();
+    }
+    else
+    {
+        std::cout << "Starting long simulation..." << std::endl;
+        constexpr double num_days = 40.0;
+        simulate(is_sensitivity_analysis, num_days);
+    }
+
+    std::cout << "End of the simulation(s)!" << std::endl;
 
     return 0;
 }
+
