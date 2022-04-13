@@ -1,24 +1,28 @@
+// usage: ./model [sensitivity]
+
 #include <iostream>
+#include <fstream>
+#include <cmath>
+#include <cstring>
+#include <random>
+#include <thread>
+
 #include "ascent/Ascent.h"
 
 
 using namespace asc;
 
+static constexpr size_t c_NumComputationsPerDt = 2;
 static constexpr int c_Precision = 9;
 
 // Target unit for concentration: pmol/l
 // Target unit for rates of change: pmol/(sl)
 
 static constexpr double mol = 1.0;
-// static constexpr double umol = 1.0e6;
-// static constexpr double nmol = 1.0e3;
-// static constexpr double pmol = 1.0e0;
-// static constexpr double fmol = 1.0e-3;
 
 static constexpr double s = 1.0;
 static constexpr double l = 1.0;
 
-// static constexpr double mU = 100.0 / 6.0 * nmol / s;
 static constexpr double mU = 1.0;
 
 static constexpr double ng = 1.0;
@@ -26,6 +30,10 @@ static constexpr double ng = 1.0;
 
 struct Constants
 {
+    Constants() = default;
+
+    Constants(const double GT) : GT{GT} {}
+
     const double aT = 0.1 / l;
     const double aS = 0.4 / l;
     const double aS2 = 2.6e5 / l;
@@ -40,9 +48,9 @@ struct Constants
 
     const double GT = 3.375e-12 * mol / s;
     const double GH = 473.0214 * mU / s;
-    const double GD1 = 2.3527e-8 * mol / s;
+    const double GD1 = 2.2e-8 * mol / s;
     const double GD2 = 4.3e-15 * mol / s;
-    const double GT3 = 1.8882e-13 * mol / s;
+    const double GT3 = 3.94e-13 * mol / s;
     const double GR = 1.0 * mol / s;
 
     const double KM1 = 5.0e-7 * mol / l;
@@ -53,7 +61,7 @@ struct Constants
     const double K42 = 2e8 * l / mol;
     const double K31 = 2e9 * l / mol;
 
-    // Not in provided code
+    // Called k_Dio in the code
     const double k = 1.0 * mU / l;
 
     const double DH = 4.7e-8 * mol / l;
@@ -66,47 +74,52 @@ struct Constants
 
     const double TRH = 6.9e-9 * mol / l;
     const double TBG = 3.0e-7 * mol / l;
-    const double TBPA = 4.5e-6 * mol / l; // Not in provided code
+    const double TBPA = 4.5e-6 * mol / l;
     const double IBS = 8.0e-6 * mol / l;
 };
+
 
 class DelayedState
 {
 public:
-    DelayedState(const double dt, const double TSH_0, const double TSHz_0, const double FT4_0, const double T3R_0)
+    DelayedState(const double dt, const double TSH_0, const double TSHz_0, const double FT4_0, const double T3R_0, const double TRH_0)
     {
-        TSH_history.resize(4 * (static_cast<size_t>(T0T / dt) + 2));
-        TSHz_history.resize(4 * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
-        FT4_history.resize(4 * (static_cast<size_t>(T03Z / dt) + 2));
-        T3R_history.resize(4 * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
+        TSH_history.resize(c_NumComputationsPerDt * (static_cast<size_t>(T0T / dt) + 2));
+        TSHz_history.resize(c_NumComputationsPerDt * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
+        FT4_history.resize(c_NumComputationsPerDt * (static_cast<size_t>(T03Z / dt) + 2));
+        T3R_history.resize(c_NumComputationsPerDt * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
+        TRH_history.resize(c_NumComputationsPerDt * (static_cast<size_t>(std::max(T0S, T0S2) / dt) + 2));
 
         TSH_history[0] = TSH_0;
         TSHz_history[0] = TSHz_0;
         FT4_history[0] = FT4_0;
         T3R_history[0] = T3R_0;
+        TRH_history[0] = TSH_0;
     }
 
-    void update_history(const double t, const double TSH, const double TSHz, const double FT4, const double T3R) noexcept
+    void update_history(const double t, const double TSH, const double TSHz, const double FT4, const double T3R, const double TRH) noexcept
     {
         TSH_history[TSH_idx] = TSH;
         TSHz_history[TSHz_idx] = TSHz;
         FT4_history[FT4_idx] = FT4;
         T3R_history[T3R_idx] = T3R;
+        TRH_history[TRH_idx] = TRH;
 
-	if (t > last_t)
-	{
-	    last_t = t;
+        if (t > last_t)
+        {
+            last_t = t;
 
             TSH_idx = (TSH_idx + 1) % TSH_history.size();
             TSHz_idx = (TSHz_idx + 1) % TSHz_history.size();
             FT4_idx = (FT4_idx + 1) % FT4_history.size();
             T3R_idx = (T3R_idx + 1) % T3R_history.size();
+            TRH_idx = (TRH_idx + 1) % TRH_history.size();
 
             if (t >= T0T) ++T0T_idx;
             if (t >= T03Z) ++T03Z_idx;
             if (t >= T0S) ++T0S_idx;
             if (t >= T0S2) ++T0S2_idx;
-	}
+        }
     }
 
     double getTSH_T0T() const noexcept { return TSH_history[T0T_idx % TSH_history.size()]; }
@@ -121,6 +134,9 @@ public:
 
     double getT3R_T0S2() const noexcept { return T3R_history[T0S2_idx % T3R_history.size()]; }
 
+    double getTRH_T0S() const noexcept { return TRH_history[T0S_idx % TRH_history.size()]; }
+
+    double getTRH_T0S2() const noexcept { return TRH_history[T0S2_idx % TRH_history.size()]; }
 
 private:
 
@@ -130,6 +146,7 @@ private:
     std::vector<double> TSHz_history;
     std::vector<double> FT4_history;
     std::vector<double> T3R_history;
+    std::vector<double> TRH_history;
 
     const double T0T = 300.0;
     const double T03Z = 3600.0;
@@ -145,6 +162,7 @@ private:
     size_t TSHz_idx = 1;
     size_t FT4_idx = 1;
     size_t T3R_idx = 1;
+    size_t TRH_idx = 1;
 };
 
 
@@ -178,30 +196,78 @@ struct CurrentState
 };
 
 
-int main()
+class Hypothalamus
+{
+public:
+    inline double get_TRH_constant(const double t, const Constants& cs) const noexcept
+    {
+        (void) t;
+        return cs.TRH;
+    }
+
+    inline double get_TRH_oscillatory(const double t, const Constants& cs) const noexcept
+    {
+        return cs.TRH + cs.TRH * sinusoidal_amplitude * std::cos(2 * M_PI * t / 86400 - phase);
+    }
+
+    inline double get_TRH(const double t, const Constants& cs) noexcept
+    {
+        const auto curr_interval = static_cast<unsigned>(t / noise_sample_interval);
+
+        if (curr_interval != prev_interval)
+        {
+            prev_interval = curr_interval;
+            noise = std::max(0.0, noise_distribution(uniform_rng));
+        }
+
+        return get_TRH_oscillatory(t, cs) * noise;
+    }
+
+private:
+
+    const double sinusoidal_amplitude = 0.6;
+    const double phase = M_PI * 5 / 12;
+
+    const double noise_mean = 1.0;
+    const double noise_sigma = 0.5;
+    const unsigned long noise_seed = 0;
+    const double noise_sample_interval = 100.0;
+
+    std::default_random_engine uniform_rng = std::default_random_engine(noise_seed);
+    std::normal_distribution<double> noise_distribution = std::normal_distribution<double>(noise_mean, noise_sigma);
+
+    double noise = 0.0;
+    unsigned prev_interval = -1;
+};
+
+
+double simulate(const bool is_sensitivity_analysis, const double num_days, const double GT = 3.375e-12)
 {
     // time params
     double t = 0.0;
-    constexpr double dt = 0.01;
-    constexpr double t_end = 60.0 * 60.0 * 24.0 * 10.0;
+    constexpr double dt = 0.008;
+    const double t_end = 60.0 * 60.0 * 24.0 * num_days;
 
-    const auto cs = Constants();
+    // holds all constant model parameters
+    const auto cs = Constants(GT);
+
+    // generates TRH signal
+    auto hypothalamus = Hypothalamus();
 
     // initial conditions
     auto curr_state = CurrentState();
-    const double T4_0 = 1.1399e-7;
-    const double T3P_0 = 3.1622e-9;
-    const double T3c_0 = 1.0944e-8; // Assuming T3z == T3c
-    const double TSH = 1.8855;
-    const double TSHz = 2.0134;
-    curr_state.populate(T4_0, T3P_0, T3c_0, TSH, TSHz, cs);
+    const double T4_0 = 1.2202e-7;
+    const double T3P_0 = 3.1615e-9;
+    const double T3c_0 = 1.1701e-8; // Assuming T3z == T3c
+    const double TSH_0 = 1.8157;
+    const double TSHz_0 = 1.9389;
+    curr_state.populate(T4_0, T3P_0, T3c_0, TSH_0, TSHz_0, cs);
 
     // delay state
-    auto delay = DelayedState(dt, curr_state.TSH, curr_state.TSHz, curr_state.FT4, curr_state.T3R);
-
+    auto delay = DelayedState(dt, curr_state.TSH, curr_state.TSHz, curr_state.FT4, curr_state.T3R, cs.TRH);
 
     // model
-    auto thyroid = [&cs = std::as_const(cs), &state = curr_state, &delay]
+    auto thyroid = [&cs = std::as_const(cs), &state = curr_state, &delay, &hypothalamus]
         (const state_t& x, state_t& xd, const double t)
     {
         // current state variables
@@ -214,9 +280,11 @@ int main()
         const auto FT4_T03Z = delay.getFT4_T03Z();
         const auto T3R_T0S = delay.getT3R_T0S();
         const auto T3R_T0S2 = delay.getT3R_T0S2();
+        const auto TRH_T0S = delay.getTRH_T0S();
+        const auto TRH_T0S2 = delay.getTRH_T0S2();
 
         // update history state
-        delay.update_history(t, state.TSH, state.TSHz, state.FT4, state.T3R);
+        delay.update_history(t, state.TSH, state.TSHz, state.FT4, state.T3R, hypothalamus.get_TRH_constant(t, cs));
 
         // differential equations
         const auto dT4 = cs.aT * cs.GT * TSH_T0T / (TSH_T0T + cs.DT) - cs.BT * state.T4;
@@ -230,10 +298,10 @@ int main()
 
         const auto dT3c = (cs.a32 * cs.GD2 * FT4_T03Z) / (FT4_T03Z + cs.KM2) - cs.B32 * state.T3c;
 
-        const auto dTSH = (cs.aS * cs.GH * cs.TRH) / ((cs.TRH + cs.DH) * (1 + (cs.SS * TSHz_T0S) / (TSHz_T0S + cs.DS)) *
+        const auto dTSH = (cs.aS * cs.GH * TRH_T0S) / ((TRH_T0S + cs.DH) * (1 + (cs.SS * TSHz_T0S) / (TSHz_T0S + cs.DS)) *
             (1 + cs.LS * T3R_T0S)) - cs.BS * state.TSH;
 
-        const auto dTSHz = (cs.aS2 * cs.GH * cs.TRH) / ((cs.TRH + cs.DH) * (1 + (cs.SS * TSHz_T0S2) / (TSHz_T0S2 + cs.DS)) *
+        const auto dTSHz = (cs.aS2 * cs.GH * TRH_T0S2) / ((TRH_T0S2 + cs.DH) * (1 + (cs.SS * TSHz_T0S2) / (TSHz_T0S2 + cs.DS)) *
             (1 + cs.LS * T3R_T0S2)) - cs.BS2 * state.TSHz;
 
         xd[0] = dT4;
@@ -243,41 +311,116 @@ int main()
         xd[4] = dTSHz;
     };
 
-    auto integrator = RK4();
+    auto integrator = Euler();
     auto recorder = Recorder();
     recorder.precision = c_Precision;
 
     auto x = state_t({curr_state.T4, curr_state.T3P, curr_state.T3c, curr_state.TSH, curr_state.TSHz});
 
     unsigned num_iters = 0;
-    constexpr unsigned iter_sample_size = 100;
+
+    // save states to csv every 5 seconds
+    constexpr auto iter_sample_size = static_cast<unsigned>(5 / dt);
 
     while (t < t_end)
     {
-	    if ((num_iters++) % iter_sample_size == 0)
-	    {
+        if ((num_iters++) % iter_sample_size == 0 && !is_sensitivity_analysis)
+        {
             recorder({
                 t,
                 curr_state.T4,
-                curr_state.T3P, 
-                curr_state.T3c, 
-                curr_state.TSH, 
-                curr_state.TSHz, 
-                curr_state.T4th, 
-                curr_state.FT3, 
-                curr_state.FT4, 
-                curr_state.T3N, 
+                curr_state.T3P,
+                curr_state.T3c,
+                curr_state.TSH,
+                curr_state.TSHz,
+                curr_state.T4th,
+                curr_state.FT3,
+                curr_state.FT4,
+                curr_state.T3N,
                 curr_state.T3R
             });
-	    }
+        }
 
+        // timestep the model
         integrator(thyroid, x, t, dt);
-	    // delay.update_history(t, curr_state.TSH, curr_state.TSHz, curr_state.FT4, curr_state.T3R);
     }
 
-    recorder.csv("thyroid", {"t", "T4", "T3P", "T3c", "TSH", "TSHz", "T4th", "FT3", "FT4", "T3N", "T3R"});
+    if (!is_sensitivity_analysis)
+    {
+        // save states to csv
+        recorder.csv("thyroid", {"t", "T4", "T3P", "T3c", "TSH", "TSHz", "T4th", "FT3", "FT4", "T3N", "T3R"});
+    }
+    
+    return curr_state.TSH;
+}
 
-    std::cout << "The simulation has completed!" << std::endl;
+
+int main(int argc, char** argv)
+{
+    const bool is_sensitivity_analysis = argc > 1 && strcmp(argv[1], "sensitivity") == 0;
+
+    if (is_sensitivity_analysis)
+    {
+        std::cout << "Starting sensitivity analysis..." << std::endl;
+        constexpr size_t num_workers = 10;
+        constexpr double num_days = 40.0;
+        constexpr double GTt = 0.01;
+        constexpr double GT_max = 1.0;
+
+        auto workers = std::vector<std::thread>();
+
+        auto tsh_steady_states = std::array<double, static_cast<size_t>(GT_max / GTt)>();
+
+        for (size_t id = 0; id < num_workers; ++id)
+        {
+            workers.emplace_back(
+                std::thread([is_sensitivity_analysis, GTt, num_days, num_workers,
+                    &tsh_steady_states] (const size_t id) {
+
+                    constexpr double GT_stride = num_workers * GTt;
+                    double GT = GTt * id;
+                    size_t idx = id;
+
+                    for (;;)
+                    {
+                        tsh_steady_states[idx] =
+                            simulate(is_sensitivity_analysis, num_days, GT * 1e-11);
+
+                        idx += num_workers;
+                        
+                        if (idx >= tsh_steady_states.size()) break;
+
+                        GT += GT_stride;
+                    }
+
+                }, id)
+            );
+        }
+
+        std::for_each(workers.begin(), workers.end(), [] (std::thread &t) { t.join(); });
+
+        auto out_file = std::ofstream();
+        out_file.open("tsh_sensitivity.csv");
+        out_file << "GT,TSH\n";
+
+        for (size_t i = 0; i < tsh_steady_states.size(); ++i)
+        {
+            const auto GT = i * GTt;
+
+            out_file << GT << "," << tsh_steady_states[i] << "\n";
+        }
+
+        out_file.close();
+    }
+    else
+    {
+        std::cout << "Starting single long simulation..." << std::endl;
+        constexpr double num_days = 40.0;
+        simulate(is_sensitivity_analysis, num_days);
+    }
+
+    std::cout << "End of the simulation(s)!" << std::endl;
 
     return 0;
 }
+
