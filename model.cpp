@@ -1,3 +1,5 @@
+// usage: ./model [sensitivity]
+
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -17,15 +19,10 @@ static constexpr int c_Precision = 9;
 // Target unit for rates of change: pmol/(sl)
 
 static constexpr double mol = 1.0;
-// static constexpr double umol = 1.0e6;
-// static constexpr double nmol = 1.0e3;
-// static constexpr double pmol = 1.0e0;
-// static constexpr double fmol = 1.0e-3;
 
 static constexpr double s = 1.0;
 static constexpr double l = 1.0;
 
-// static constexpr double mU = 100.0 / 6.0 * nmol / s;
 static constexpr double mU = 1.0;
 
 static constexpr double ng = 1.0;
@@ -51,9 +48,9 @@ struct Constants
 
     const double GT = 3.375e-12 * mol / s;
     const double GH = 473.0214 * mU / s;
-    const double GD1 = 2.3527e-8 * mol / s;
+    const double GD1 = 2.2e-8 * mol / s;
     const double GD2 = 4.3e-15 * mol / s;
-    const double GT3 = 1.8882e-13 * mol / s;
+    const double GT3 = 3.94e-13 * mol / s;
     const double GR = 1.0 * mol / s;
 
     const double KM1 = 5.0e-7 * mol / l;
@@ -251,8 +248,10 @@ double simulate(const bool is_sensitivity_analysis, const double num_days, const
     constexpr double dt = 0.008;
     const double t_end = 60.0 * 60.0 * 24.0 * num_days;
 
+    // holds all constant model parameters
     const auto cs = Constants(GT);
 
+    // generates TRH signal
     auto hypothalamus = Hypothalamus();
 
     // initial conditions
@@ -319,6 +318,8 @@ double simulate(const bool is_sensitivity_analysis, const double num_days, const
     auto x = state_t({curr_state.T4, curr_state.T3P, curr_state.T3c, curr_state.TSH, curr_state.TSHz});
 
     unsigned num_iters = 0;
+
+    // save states to csv every 5 seconds
     constexpr auto iter_sample_size = static_cast<unsigned>(5 / dt);
 
     while (t < t_end)
@@ -340,11 +341,13 @@ double simulate(const bool is_sensitivity_analysis, const double num_days, const
             });
         }
 
+        // timestep the model
         integrator(thyroid, x, t, dt);
     }
 
     if (!is_sensitivity_analysis)
     {
+        // save states to csv
         recorder.csv("thyroid", {"t", "T4", "T3P", "T3c", "TSH", "TSHz", "T4th", "FT3", "FT4", "T3N", "T3R"});
     }
     
@@ -360,8 +363,8 @@ int main(int argc, char** argv)
     {
         std::cout << "Starting sensitivity analysis..." << std::endl;
         constexpr size_t num_workers = 10;
-        constexpr double num_days = 30.0;
-        constexpr double GTt = 0.02;
+        constexpr double num_days = 40.0;
+        constexpr double GTt = 0.01;
         constexpr double GT_max = 1.0;
 
         auto workers = std::vector<std::thread>();
@@ -411,7 +414,7 @@ int main(int argc, char** argv)
     }
     else
     {
-        std::cout << "Starting long simulation..." << std::endl;
+        std::cout << "Starting single long simulation..." << std::endl;
         constexpr double num_days = 40.0;
         simulate(is_sensitivity_analysis, num_days);
     }
